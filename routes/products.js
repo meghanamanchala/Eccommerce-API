@@ -3,6 +3,7 @@ const express = require('express');
 const _ = require('lodash');
 const jwt = require('jsonwebtoken');
 const authenticateJWT = require('../middleware/authenticateJWT');
+const { productCreateSchema, productUpdateSchema } = require('../validation/productSchemas');
 
 const router = express.Router();
 
@@ -150,35 +151,43 @@ router.get('/:productId', async (req, res) => {
 // Create product
 router.post('/', authenticateJWT, async (req, res) => {
   try {
-    // BUG: No authentication check
-    // BUG: No input validation
-    const productData = req.body;
-    
+    const { error, value } = productCreateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Invalid input', details: error.details.map(d => d.message) });
+    }
+    const productData = value;
     const newId = (Math.max(...products.map(p => parseInt(p.id))) + 1).toString();
-    
     const newProduct = {
       id: newId,
       name: productData.name,
       description: productData.description,
-      price: productData.price, // BUG: No validation for positive numbers
+      price: productData.price,
       category: productData.category,
       brand: productData.brand,
       stock: productData.stock || 0,
       rating: 0,
       tags: productData.tags || [],
       createdAt: new Date().toISOString(),
-      // BUG: Adding internal fields without validation
-      costPrice: productData.costPrice || productData.price * 0.7,
-      supplier: productData.supplier || 'Unknown',
-      internalNotes: productData.internalNotes || '',
-      adminOnly: productData.adminOnly || false
+      costPrice: productData.price * 0.7,
+      supplier: 'Unknown',
+      internalNotes: '',
+      adminOnly: false
     };
-
     products.push(newProduct);
-
     res.status(201).json({
       message: 'Product created successfully',
-      product: newProduct // BUG: Returning all internal data
+      product: {
+        id: newProduct.id,
+        name: newProduct.name,
+        description: newProduct.description,
+        price: newProduct.price,
+        category: newProduct.category,
+        brand: newProduct.brand,
+        stock: newProduct.stock,
+        rating: newProduct.rating,
+        tags: newProduct.tags,
+        createdAt: newProduct.createdAt
+      }
     });
   } catch (error) {
     res.status(500).json({ 
@@ -192,22 +201,30 @@ router.post('/', authenticateJWT, async (req, res) => {
 router.put('/:productId', authenticateJWT, async (req, res) => {
   try {
     const { productId } = req.params;
-    const updateData = req.body;
-    
-    // BUG: No authentication check
     const productIndex = products.findIndex(p => p.id === productId);
-    
     if (productIndex === -1) {
       return res.status(404).json({ error: 'Product not found' });
     }
-
-    // BUG: No validation of update data
-    // BUG: Allowing arbitrary field updates
-    products[productIndex] = { ...products[productIndex], ...updateData };
-
+    const { error, value } = productUpdateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Invalid input', details: error.details.map(d => d.message) });
+    }
+    products[productIndex] = { ...products[productIndex], ...value };
+    const updated = products[productIndex];
     res.json({
       message: 'Product updated successfully',
-      product: products[productIndex] // BUG: Returning all data
+      product: {
+        id: updated.id,
+        name: updated.name,
+        description: updated.description,
+        price: updated.price,
+        category: updated.category,
+        brand: updated.brand,
+        stock: updated.stock,
+        rating: updated.rating,
+        tags: updated.tags,
+        createdAt: updated.createdAt
+      }
     });
   } catch (error) {
     res.status(500).json({ 
