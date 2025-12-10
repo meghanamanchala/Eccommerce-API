@@ -99,12 +99,7 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (error) {
-    // BUG: Exposing internal error details
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message, // BUG: Exposing error details
-      stack: error.stack // BUG: Exposing stack trace
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -141,10 +136,7 @@ router.get('/:productId', async (req, res) => {
     };
     res.json(responseData);
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -190,10 +182,7 @@ router.post('/', authenticateJWT, async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -227,10 +216,7 @@ router.put('/:productId', authenticateJWT, async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -252,10 +238,7 @@ router.delete('/:productId', authenticateJWT, async (req, res) => {
 
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {
-    res.status(500).json({ 
-      error: 'Internal server error',
-      details: error.message
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
