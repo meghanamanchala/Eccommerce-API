@@ -1,6 +1,8 @@
+
 const express = require('express');
 const _ = require('lodash');
 const jwt = require('jsonwebtoken');
+const authenticateJWT = require('../middleware/authenticateJWT');
 
 const router = express.Router();
 
@@ -146,7 +148,7 @@ router.get('/:productId', async (req, res) => {
 });
 
 // Create product
-router.post('/', async (req, res) => {
+router.post('/', authenticateJWT, async (req, res) => {
   try {
     // BUG: No authentication check
     // BUG: No input validation
@@ -187,7 +189,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update product
-router.put('/:productId', async (req, res) => {
+router.put('/:productId', authenticateJWT, async (req, res) => {
   try {
     const { productId } = req.params;
     const updateData = req.body;
@@ -216,7 +218,7 @@ router.put('/:productId', async (req, res) => {
 });
 
 // Delete product
-router.delete('/:productId', async (req, res) => {
+router.delete('/:productId', authenticateJWT, async (req, res) => {
   try {
     const { productId } = req.params;
     
