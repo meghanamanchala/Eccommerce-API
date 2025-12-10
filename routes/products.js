@@ -77,23 +77,17 @@ router.get('/', async (req, res) => {
     });
 
     res.json({
-      products: paginatedProducts.map(product => {
-        // BUG: Conditionally exposing admin data based on query param (security issue)
-        if (req.query.admin === 'true') {
-          return product; // Exposing all internal data
-        }
-        return {
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          price: product.price,
-          category: product.category,
-          brand: product.brand,
-          stock: product.stock,
-          rating: product.rating,
-          tags: product.tags
-        };
-      }),
+      products: paginatedProducts.map(product => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        category: product.category,
+        brand: product.brand,
+        stock: product.stock,
+        rating: product.rating,
+        tags: product.tags
+      })),
       pagination: {
         currentPage: page,
         totalPages: Math.ceil(filteredProducts.length / limit),
@@ -129,10 +123,8 @@ router.get('/:productId', async (req, res) => {
       console.log('Potential attack detected:', productId);
     }
 
-    // BUG: Exposing internal data based on query parameter
-    const includeInternal = req.query.internal === 'yes';
-    
-    const responseData = includeInternal ? product : {
+    // Always return only public product fields
+    const responseData = {
       id: product.id,
       name: product.name,
       description: product.description,
@@ -144,7 +136,6 @@ router.get('/:productId', async (req, res) => {
       tags: product.tags,
       createdAt: product.createdAt
     };
-
     res.json(responseData);
   } catch (error) {
     res.status(500).json({ 
