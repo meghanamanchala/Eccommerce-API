@@ -4,16 +4,14 @@ const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
-// Large product dataset to demonstrate performance issues
+// Large product dataset generated once and cached in memory
+const categories = ['Electronics', 'Clothing', 'Books', 'Home', 'Sports', 'Beauty'];
+const brands = ['BrandA', 'BrandB', 'BrandC', 'BrandD', 'BrandE'];
 let products = [];
-
-// Generate sample products (performance issue - doing this on every request)
 function generateProducts() {
-  const categories = ['Electronics', 'Clothing', 'Books', 'Home', 'Sports', 'Beauty'];
-  const brands = ['BrandA', 'BrandB', 'BrandC', 'BrandD', 'BrandE'];
-  
-  for (let i = 1; i <= 1000; i++) { // BUG: Generating 1000 products every time
-    products.push({
+  const arr = [];
+  for (let i = 1; i <= 1000; i++) {
+    arr.push({
       id: i.toString(),
       name: `Product ${i}`,
       description: `This is product number ${i} with amazing features`,
@@ -24,25 +22,22 @@ function generateProducts() {
       rating: (Math.random() * 5).toFixed(1),
       tags: [`tag${i}`, `feature${i % 10}`],
       createdAt: new Date().toISOString(),
-      // BUG: Sensitive internal data exposed
       costPrice: Math.floor(Math.random() * 500) + 5,
       supplier: `Supplier ${i % 20}`,
       internalNotes: `Internal notes for product ${i}`,
       adminOnly: Math.random() > 0.9
     });
   }
+  return arr;
 }
+// Generate and cache products at module load
+products = generateProducts();
 
 const JWT_SECRET = 'ecommerce-secret-key'; // BUG: Hardcoded secret
 
-// Middleware to ensure products are generated
-router.use((req, res, next) => {
-  // BUG: Regenerating products on every request (major performance issue)
-  if (products.length === 0) {
-    generateProducts();
-  }
-  next();
-});
+// Middleware no longer needed for product generation
+// Products are generated and cached at module load
+// router.use((req, res, next) => { next(); });
 
 // Get all products
 router.get('/', async (req, res) => {
