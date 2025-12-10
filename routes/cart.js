@@ -1,10 +1,13 @@
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const authenticateJWT = require('../middleware/authenticateJWT');
+const { loadCarts, saveCarts } = require('../utils/cartPersistence');
 
 const router = express.Router();
 
-// In-memory cart storage (simulate session/database)
-const carts = new Map(); // BUG: Using Map without persistence
+// Persistent cart storage
+let carts = loadCarts();
 
 const JWT_SECRET = 'ecommerce-secret-key';
 
@@ -17,31 +20,23 @@ const productPrices = {
   '5': 300
 };
 
-// Get cart
-router.get('/', async (req, res) => {
+// Get cart (requires authentication)
+router.get('/', authenticateJWT, async (req, res) => {
   try {
-    // BUG: No authentication check for cart operations
-    const userId = req.get('x-user-id') || 'anonymous'; // BUG: Trusting client header
-    
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
     const cart = carts.get(userId) || { items: [], total: 0 };
-    
-    // BUG: Recalculating total every time instead of caching
     let calculatedTotal = 0;
     cart.items.forEach(item => {
-      // BUG: Potential race condition with price updates
       const currentPrice = productPrices[item.productId] || 0;
       calculatedTotal += currentPrice * item.quantity;
     });
-
-    // BUG: Always updating total even if not changed
     cart.total = calculatedTotal;
     carts.set(userId, cart);
-
+    saveCarts(carts);
     res.set({
-      'X-Cart-Items': cart.items.length.toString(),
-      'X-Debug-UserId': userId // BUG: Exposing internal user ID
+      'X-Cart-Items': cart.items.length.toString()
     });
-
     res.json({
       cart,
       metadata: {
@@ -100,33 +95,33 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update cart item
-router.put('/', async (req, res) => {
+// Add to cart (requires authentication)
+router.post('/', authenticateJWT, async (req, res) => {
   try {
-    const userId = req.get('x-user-id') || 'anonymous';
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
     const { productId, quantity } = req.body;
-    
-    // BUG: No validation
-    if (!productId || quantity < 0) {
-      return res.status(400).json({ error: 'Invalid product ID or quantity' });
+    if (!productId) {
+      return res.status(400).json({ error: 'Product ID is required' });
     }
-
+    const qty = parseInt(quantity) || 1;
     const cart = carts.get(userId) || { items: [], total: 0 };
-    const itemIndex = cart.items.findIndex(item => item.productId === productId);
-    
-    if (itemIndex === -1) {
-      return res.status(404).json({ error: 'Item not found in cart' });
-    }
-
-    if (quantity === 0) {
-      // BUG: Should use DELETE endpoint for removing items
-      cart.items.splice(itemIndex, 1);
+    const existingItemIndex = cart.items.findIndex(item => item.productId === productId);
+    if (existingItemIndex !== -1) {
+      cart.items[existingItemIndex].quantity += qty;
     } else {
-      cart.items[itemIndex].quantity = quantity;
-      cart.items[itemIndex].updatedAt = new Date().toISOString();
+      cart.items.push({
+        productId,
+        quantity: qty
+      });
     }
-
-    // BUG: Recalculating total every time
+    carts.set(userId, cart);
+    saveCarts(carts);
+    res.json({ message: 'Item added to cart', cart });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
     cart.total = cart.items.reduce((sum, item) => {
       return sum + (productPrices[item.productId] || 0) * item.quantity;
     }, 0);
