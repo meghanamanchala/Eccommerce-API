@@ -49,47 +49,42 @@ router.get('/', authenticateJWT, async (req, res) => {
   }
 });
 
-// Add to cart
-router.post('/', async (req, res) => {
+// Add to cart (requires authentication)
+router.post('/', authenticateJWT, async (req, res) => {
   try {
-    const userId = req.get('x-user-id') || 'anonymous';
-    const { productId, quantity = 1 } = req.body;
-    
-    // BUG: No validation of productId or quantity
-    if (!productId) {
-      return res.status(400).json({ error: 'Product ID is required' });
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
+    const { productId, quantity } = req.body;
+    // Validate productId and quantity
+    if (!productId || typeof productId !== 'string' || !/^[1-9][0-9]*$/.test(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
     }
-
+    const qty = parseInt(quantity) || 1;
+    if (qty < 1 || qty > 100) {
+      return res.status(400).json({ error: 'Quantity must be between 1 and 100' });
+    }
+    // Check if product exists (simulate by checking productPrices or ideally from products array)
+    if (!productPrices[productId]) {
+      return res.status(404).json({ error: 'Product does not exist' });
+    }
     const cart = carts.get(userId) || { items: [], total: 0 };
-    
-    // BUG: No check if product exists in product catalog
     const existingItemIndex = cart.items.findIndex(item => item.productId === productId);
-    
-    if (existingItemIndex >= 0) {
-      // BUG: No check for maximum quantity limits
-      cart.items[existingItemIndex].quantity += quantity;
+    if (existingItemIndex !== -1) {
+      cart.items[existingItemIndex].quantity = Math.min(cart.items[existingItemIndex].quantity + qty, 100);
     } else {
       cart.items.push({
         productId,
-        quantity,
-        addedAt: new Date().toISOString(),
-        // BUG: Storing price in cart (should fetch current price)
-        price: productPrices[productId] || 0
+        quantity: qty,
+        addedAt: new Date().toISOString()
       });
     }
-
-    // BUG: Inefficient total recalculation
+    // Recalculate total
     cart.total = cart.items.reduce((sum, item) => {
       return sum + (productPrices[item.productId] || 0) * item.quantity;
     }, 0);
-
     carts.set(userId, cart);
-
-    res.json({
-      message: 'Item added to cart',
-      cart,
-      addedItem: { productId, quantity }
-    });
+    saveCarts(carts);
+    res.json({ message: 'Item added to cart', cart });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -122,52 +117,28 @@ router.post('/', authenticateJWT, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-    cart.total = cart.items.reduce((sum, item) => {
-      return sum + (productPrices[item.productId] || 0) * item.quantity;
-    }, 0);
 
-    carts.set(userId, cart);
-
-    res.json({
-      message: 'Cart item updated',
-      cart
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Remove from cart
-router.delete('/', async (req, res) => {
+// Remove from cart (requires authentication)
+router.delete('/', authenticateJWT, async (req, res) => {
   try {
-    const userId = req.get('x-user-id') || 'anonymous';
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ error: 'User not authenticated' });
     const { productId } = req.query;
-    
-    if (!productId) {
-      return res.status(400).json({ error: 'Product ID is required' });
+    if (!productId || typeof productId !== 'string' || !/^[1-9][0-9]*$/.test(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
     }
-
     const cart = carts.get(userId) || { items: [], total: 0 };
     const itemIndex = cart.items.findIndex(item => item.productId === productId);
-    
     if (itemIndex === -1) {
       return res.status(404).json({ error: 'Item not found in cart' });
     }
-
     const removedItem = cart.items.splice(itemIndex, 1)[0];
-
-    // BUG: Inefficient recalculation again
     cart.total = cart.items.reduce((sum, item) => {
       return sum + (productPrices[item.productId] || 0) * item.quantity;
     }, 0);
-
     carts.set(userId, cart);
-
-    res.json({
-      message: 'Item removed from cart',
-      cart,
-      removedItem
-    });
+    saveCarts(carts);
+    res.json({ message: 'Item removed from cart', cart, removedItem });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }

@@ -36,7 +36,7 @@ function generateProducts() {
 // Generate and cache products at module load
 products = generateProducts();
 
-const JWT_SECRET = 'ecommerce-secret-key'; // BUG: Hardcoded secret
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Middleware no longer needed for product generation
 // Products are generated and cached at module load
@@ -45,20 +45,27 @@ const JWT_SECRET = 'ecommerce-secret-key'; // BUG: Hardcoded secret
 // Get all products
 router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50; // BUG: Default limit too high
+    // Enforce safe pagination defaults and limits
+    let page = parseInt(req.query.page, 10);
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 20;
+    limit = Math.min(limit, 100); // Max 100 per page
+
     const search = req.query.search;
     const category = req.query.category;
     const sortBy = req.query.sortBy || 'name';
     const sortOrder = req.query.sortOrder || 'asc';
 
-    let filteredProducts = [...products]; // BUG: Not efficient, copying entire array
+    // Avoid unnecessary array copy, filter in-place
+    let filteredProducts = products;
 
-    // BUG: Inefficient search - linear search through all products
+    // Optimized search: lowercase search term once
     if (search) {
-      filteredProducts = filteredProducts.filter(p => 
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.description.toLowerCase().includes(search.toLowerCase())
+      const searchTerm = search.toLowerCase();
+      filteredProducts = filteredProducts.filter(p =>
+        p.name.toLowerCase().includes(searchTerm) ||
+        p.description.toLowerCase().includes(searchTerm)
       );
     }
 
@@ -66,17 +73,17 @@ router.get('/', async (req, res) => {
       filteredProducts = filteredProducts.filter(p => p.category === category);
     }
 
-    // BUG: Inefficient sorting
+    // Efficient sorting (lodash is fine for this scale)
     filteredProducts = _.orderBy(filteredProducts, [sortBy], [sortOrder]);
 
-    // BUG: No pagination validation
+    // Pagination
+    const totalItems = filteredProducts.length;
+    const totalPages = Math.ceil(totalItems / limit);
     const startIndex = (page - 1) * limit;
     const paginatedProducts = filteredProducts.slice(startIndex, startIndex + limit);
 
     res.set({
-      'X-Total-Count': filteredProducts.length.toString(),
-      'X-Performance-Warning': 'This endpoint is slow, needs optimization', // HINT
-      'X-Secret-Query': 'try ?admin=true'
+      'X-Total-Count': totalItems.toString()
     });
 
     res.json({
@@ -93,8 +100,8 @@ router.get('/', async (req, res) => {
       })),
       pagination: {
         currentPage: page,
-        totalPages: Math.ceil(filteredProducts.length / limit),
-        totalItems: filteredProducts.length,
+        totalPages,
+        totalItems,
         itemsPerPage: limit
       }
     });
@@ -107,20 +114,18 @@ router.get('/', async (req, res) => {
 router.get('/:productId', async (req, res) => {
   try {
     const { productId } = req.params;
-    
-    // BUG: No input validation - could cause issues with malicious input
+    // Input validation: productId must be a positive integer string
+    if (!/^[1-9][0-9]*$/.test(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+    // Reject malicious input
+    if (productId.includes('<script>') || productId.toUpperCase().includes('DROP')) {
+      return res.status(400).json({ error: 'Malicious product ID detected' });
+    }
     const product = products.find(p => p.id === productId);
-    
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
-
-    // BUG: SQL injection-like vulnerability simulation
-    if (productId.includes('<script>') || productId.includes('DROP')) {
-      // BUG: Still processing the request instead of rejecting it
-      console.log('Potential attack detected:', productId);
-    }
-
     // Always return only public product fields
     const responseData = {
       id: product.id,
@@ -224,18 +229,19 @@ router.put('/:productId', authenticateJWT, async (req, res) => {
 router.delete('/:productId', authenticateJWT, async (req, res) => {
   try {
     const { productId } = req.params;
-    
-    // BUG: No authentication check
-    // BUG: No admin role check for deletion
-    
+    // Input validation: productId must be a positive integer string
+    if (!/^[1-9][0-9]*$/.test(productId)) {
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+    // Require admin role for deletion
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin privileges required to delete products' });
+    }
     const productIndex = products.findIndex(p => p.id === productId);
-    
     if (productIndex === -1) {
       return res.status(404).json({ error: 'Product not found' });
     }
-
     products.splice(productIndex, 1);
-
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
