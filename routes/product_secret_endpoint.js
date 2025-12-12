@@ -36,11 +36,9 @@ router.get('/', async (req, res) => {
     const authHeader = req.get('authorization');
     const apiKey = req.get('x-api-key');
     const secretParam = req.query.secret;
-    
-    // PUZZLE: Multiple ways to authenticate
     let hasAccess = false;
     let accessMethod = '';
-
+    // Only allow access if admin token, api key, or query param is present
     if (authHeader === 'Bearer secret-admin-token') {
       hasAccess = true;
       accessMethod = 'bearer-token';
@@ -51,16 +49,8 @@ router.get('/', async (req, res) => {
       hasAccess = true;
       accessMethod = 'query-parameter';
     }
-
     if (!hasAccess) {
-      return res.status(403).json({ 
-        error: 'Access denied to secret product data',
-        hints: [
-          'Try using Authorization header',
-          'Check for X-API-Key header',
-          'Maybe a query parameter?'
-        ]
-      });
+      return res.status(403).json({ error: 'Access denied to secret product data' });
     }
 
     // Generate a hash based on current time for additional puzzle
